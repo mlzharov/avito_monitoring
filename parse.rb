@@ -1,4 +1,5 @@
 #!/usr/bin/ruby
+# coding: utf-8
 require 'net/http'
 require 'rubygems'
 require 'pony'
@@ -33,7 +34,7 @@ end
 def parse(html, first_elem = [])
 begin
 	ads = html.split('<div class="t_i_i t_i');
-	elems_array = [["title", "link", "cost", "time", "desc"]] #just for info
+	elems_array = [["title", "link", "cost", "time", "desc", "address"]] #just for info
 	ads.shift;
 	elems_array.shift;
 	ads.each { |e| 
@@ -43,14 +44,17 @@ begin
 		time = e.split('t_i_time">')[1].split("</span>")[0];
 		link = e.split('href="')[1].split('"')[0];
 		link = "http://www.avito.ru"+link;
-		title = e.split('title="')[1].split('"')[0].sub("&laquo;","«").sub("&raquo;","»");
+		title = e.split('title="')[1].split('"')[0].sub("&laquo;","'").sub("&raquo;","'");
 		cost = e.split('<span>')[1]
 		if(cost.nil?) then
 			cost = ""
 		else
 			cost = cost.split('</span>')[0].sub("&nbsp;"," ");
 		end
-	
+		address = "Без адреса"
+		if !e.split('t_i_address">')[1].nil? then
+			address = e.split('t_i_address">')[1].split('<i')[0];
+		end
 		desc = "Описание отсутствует"
 		resp = fetch(link);
 		if resp != nil then
@@ -59,11 +63,11 @@ begin
 				desc = desc.split('</dd>')[0];
 			end
 		end;
-		elems_array.push([title, link, cost, time, desc]);
+		elems_array.push([title, link, cost, time, desc, address]);
 		if(!first_elem.empty? && elems_array.last == first_elem) then
 			return elems_array
 		end
-	}
+	}	
 	return elems_array;
 rescue
 	return "Error"
@@ -73,18 +77,20 @@ end
 def fetch(uri_str, limit = 10)
   raise ArgumentError, 'too many HTTP redirects' if limit == 0
   begin
-  	response = Net::HTTP.get_response(URI(uri_str))
+	uri = URI.parse(uri_str)
+  	response = Net::HTTP.get_response(uri)
   	case response
   	when Net::HTTPSuccess then
   	  response.body
   	when Net::HTTPRedirection then
-  	  location = response['location']
+  	  location = uri.scheme+'://'+uri.host+response['location']
   	  warn "redirected to #{location}"
   	  fetch(location, limit - 1)
   	else
   	  raise
   	end
-  rescue
+  rescue Exception=>e
+	log(e.message,'ERROR');
   	nil
   end
 end
@@ -138,7 +144,7 @@ elsif (parse(test_resp) == "Error") then
 end
 log "OK";
 
-last_array = [["title", "link", "cost", "time", "desc"]]; 
+last_array = [["title", "link", "cost", "time", "desc","address"]]; 
 last_array.shift;
 is_error = false;
 while 1
@@ -177,7 +183,7 @@ while 1
 				log "Elements count is "+diff_array.length.to_s;
 				body="";
 				diff_array.each{ |e|
-					body+='<h2>'+e[0]+'</h2><br /><a href="'+e[1]+'">'+e[1]+'</a><br /><h3>'+e[2]+'</h3><br />Опубликовано в '+e[3]+'<br /><br />'+e[4]+'<br /><br />';
+					body+='<h2>'+e[0].dup.force_encoding('utf-8')+'</h2>'+e[5].dup.force_encoding('utf-8')+'<br /><a href="'+e[1].dup.force_encoding('utf-8')+'">'+e[1].dup.force_encoding('utf-8')+'</a><br /><h3>'+e[2].dup.force_encoding('utf-8')+'</h3><br />Опубликовано в '+e[3].dup.force_encoding('utf-8')+'<br /><br />'+e[4].dup.force_encoding('utf-8')+'<br /><br />';
 				}
 				send_mail(body, config['mail']);
 			end;
